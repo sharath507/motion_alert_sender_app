@@ -51,6 +51,8 @@ import androidx.compose.ui.res.stringResource
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 private val EMERGENCY_NUMBER_KEY = stringPreferencesKey("emergency_number")
+private val EMERGENCY_NUMBER_KEY_2 = stringPreferencesKey("emergency_number_2")
+private val EMERGENCY_NUMBER_KEY_3 = stringPreferencesKey("emergency_number_3")
 private val SENSITIVITY_KEY = floatPreferencesKey("sensitivity")
 private val ROLE_IS_AMBULANCE_KEY = booleanPreferencesKey("is_ambulance_override")
 
@@ -62,8 +64,12 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
     private var currentLocation by mutableStateOf("Not available")
     private var sensitivity by mutableStateOf(22f)
     private var emergencyNumber by mutableStateOf("")
+    private var emergencyNumber2 by mutableStateOf("")
+    private var emergencyNumber3 by mutableStateOf("")
     private var showNumberDialog by mutableStateOf(false)
     private var tempNumber by mutableStateOf("")
+    private var tempNumber2 by mutableStateOf("")
+    private var tempNumber3 by mutableStateOf("")
     private var isAmbulance by mutableStateOf(false)
     private val alerts = mutableStateListOf<AlertItem>()
     private var internalAlertReceiver: android.content.BroadcastReceiver? = null
@@ -88,6 +94,8 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
         lifecycleScope.launch {
             val prefs = applicationContext.dataStore.data.first()
             emergencyNumber = prefs[EMERGENCY_NUMBER_KEY] ?: ""
+            emergencyNumber2 = prefs[EMERGENCY_NUMBER_KEY_2] ?: ""
+            emergencyNumber3 = prefs[EMERGENCY_NUMBER_KEY_3] ?: ""
             sensitivity = prefs[SENSITIVITY_KEY] ?: 22f
             isAmbulance = prefs[ROLE_IS_AMBULANCE_KEY] ?: isAmbulance
         }
@@ -104,22 +112,47 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
                     if (showNumberDialog) {
                         AlertDialog(
                             onDismissRequest = { showNumberDialog = false },
-                            title = { Text("Emergency Contact") },
+                            title = { Text("Emergency Contacts") },
                             text = {
-                                OutlinedTextField(
-                                    value = tempNumber,
-                                    onValueChange = { tempNumber = it },
-                                    label = { Text("Phone Number") },
-                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone)
-                                )
+                                Column {
+                                    OutlinedTextField(
+                                        value = tempNumber,
+                                        onValueChange = { tempNumber = it },
+                                        label = { Text("Emergency Contact 1") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedTextField(
+                                        value = tempNumber2,
+                                        onValueChange = { tempNumber2 = it },
+                                        label = { Text("Emergency Contact 2") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    OutlinedTextField(
+                                        value = tempNumber3,
+                                        onValueChange = { tempNumber3 = it },
+                                        label = { Text("Emergency Contact 3") },
+                                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                }
                             },
                             confirmButton = {
                                 Button(
                                     onClick = {
                                         emergencyNumber = tempNumber
+                                        emergencyNumber2 = tempNumber2
+                                        emergencyNumber3 = tempNumber3
                                         showNumberDialog = false
                                         scope.launch {
-                                            context.dataStore.edit { it[EMERGENCY_NUMBER_KEY] = emergencyNumber }
+                                            context.dataStore.edit { 
+                                                it[EMERGENCY_NUMBER_KEY] = emergencyNumber
+                                                it[EMERGENCY_NUMBER_KEY_2] = emergencyNumber2
+                                                it[EMERGENCY_NUMBER_KEY_3] = emergencyNumber3
+                                            }
                                         }
                                     }
                                 ) { Text("Save") }
@@ -154,8 +187,12 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
                             }
                         },
                         emergencyNumber = emergencyNumber,
+                        emergencyNumber2 = emergencyNumber2,
+                        emergencyNumber3 = emergencyNumber3,
                         onEmergencyNumberClick = {
                             tempNumber = emergencyNumber
+                            tempNumber2 = emergencyNumber2
+                            tempNumber3 = emergencyNumber3
                             showNumberDialog = true
                         },
                         role = role,
@@ -299,8 +336,15 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
     private fun sendSms(message: String) {
         try {
             val smsManager = SmsManager.getDefault()
-            smsManager.sendTextMessage(emergencyNumber, null, message, null, null)
-            lastAlert = "Alert sent to $emergencyNumber"
+            val numbers = listOf(emergencyNumber, emergencyNumber2, emergencyNumber3).filter { it.isNotBlank() }
+            if (numbers.isEmpty()) {
+                lastAlert = "No emergency numbers set"
+                return
+            }
+            numbers.forEach { number ->
+                smsManager.sendTextMessage(number, null, message, null, null)
+            }
+            lastAlert = "Alert sent to ${numbers.size} contact(s)"
         } catch (e: Exception) {
             lastAlert = "Failed to send alert: ${e.message}"
         }
@@ -352,6 +396,8 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
         sensitivity: Float,
         onSensitivityChange: (Float) -> Unit,
         emergencyNumber: String,
+        emergencyNumber2: String,
+        emergencyNumber3: String,
         onEmergencyNumberClick: () -> Unit,
         role: String,
         isAmbulance: Boolean,
@@ -488,31 +534,53 @@ class MainActivity : ComponentActivity(), SensorEventListener, LocationListener 
                     modifier = Modifier.fillMaxWidth(),
                     onClick = onEmergencyNumberClick
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(16.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.ContactEmergency,
-                            contentDescription = "Emergency Contact",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        Column {
-                            Text("Emergency Contact", style = MaterialTheme.typography.labelMedium)
-                            Text(
-                                text = emergencyNumber.ifEmpty { "Tap to set emergency number" },
-                                style = MaterialTheme.typography.bodyLarge
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContactEmergency,
+                                contentDescription = "Emergency Contact",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(16.dp))
+                            Column {
+                                Text("Emergency Contacts", style = MaterialTheme.typography.labelMedium)
+                                Text(
+                                    text = if (emergencyNumber.isNotBlank()) emergencyNumber else "Contact 1: Not set",
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                if (emergencyNumber2.isNotBlank()) {
+                                    Text(
+                                        text = emergencyNumber2,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                if (emergencyNumber3.isNotBlank()) {
+                                    Text(
+                                        text = emergencyNumber3,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                                if (emergencyNumber.isBlank() && emergencyNumber2.isBlank() && emergencyNumber3.isBlank()) {
+                                    Text(
+                                        text = "Tap to set emergency numbers",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.weight(1f))
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        Spacer(modifier = Modifier.weight(1f))
-                        Icon(
-                            imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
 
